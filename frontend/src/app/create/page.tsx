@@ -74,7 +74,7 @@ export default function CreateRecipe() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Enter recipe name..."
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                   disabled={isSubmitting}
                 />
               </div>
@@ -89,7 +89,7 @@ export default function CreateRecipe() {
                   onChange={(e) => setContent(e.target.value)}
                   placeholder="Enter your recipe here... Include ingredients, instructions, cooking time, etc."
                   rows={12}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical text-gray-900"
                   disabled={isSubmitting}
                 />
               </div>

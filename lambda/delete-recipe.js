@@ -1,6 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand } = require('@aws-sdk/lib-dynamodb');
-const { v4: uuidv4 } = require('uuid');
+const { DynamoDBDocumentClient, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 
 const client = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(client);
@@ -9,7 +8,7 @@ exports.handler = async (event) => {
     const headers = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+        'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS'
     };
 
     if (event.httpMethod === 'OPTIONS') {
@@ -20,39 +19,33 @@ exports.handler = async (event) => {
     }
 
     try {
-        const { name, content } = JSON.parse(event.body);
+        const recipeId = event.pathParameters?.id;
         
-        if (!name || !content) {
+        if (!recipeId) {
             return {
                 statusCode: 400,
                 headers,
-                body: JSON.stringify({ error: 'Name and content are required' })
+                body: JSON.stringify({ error: 'Recipe ID is required' })
             };
         }
 
-        const recipe = {
-            id: uuidv4(),
-            name: name.trim(),
-            content: content.trim(),
-            createdAt: new Date().toISOString()
-        };
-
-        await dynamodb.send(new PutCommand({
+        await dynamodb.send(new DeleteCommand({
             TableName: 'recipes',
-            Item: recipe
+            Key: {
+                id: recipeId
+            }
         }));
 
         return {
-            statusCode: 201,
-            headers,
-            body: JSON.stringify(recipe)
+            statusCode: 204,
+            headers
         };
     } catch (error) {
         console.error('Error:', error);
         return {
             statusCode: 500,
             headers,
-            body: JSON.stringify({ error: 'Failed to create recipe' })
+            body: JSON.stringify({ error: 'Failed to delete recipe' })
         };
     }
 };

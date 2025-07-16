@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 
 interface Recipe {
@@ -17,11 +17,7 @@ export default function Home() {
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'YOUR_API_GATEWAY_URL';
 
-  useEffect(() => {
-    fetchRecipes();
-  }, [searchQuery]);
-
-  const fetchRecipes = async () => {
+  const fetchRecipes = useCallback(async () => {
     try {
       const url = searchQuery 
         ? `${API_BASE_URL}/recipes?search=${encodeURIComponent(searchQuery)}`
@@ -35,7 +31,11 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchQuery, API_BASE_URL]);
+
+  useEffect(() => {
+    fetchRecipes();
+  }, [fetchRecipes]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -57,7 +57,7 @@ export default function Home() {
               placeholder="Search recipes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
             />
           </div>
 
@@ -80,9 +80,10 @@ export default function Home() {
           ) : (
             <div className="grid gap-4">
               {recipes.map((recipe) => (
-                <div 
+                <Link
                   key={recipe.id}
-                  className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
+                  href={`/recipe?id=${recipe.id}`}
+                  className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer block"
                 >
                   <h2 className="text-xl font-semibold text-gray-900 mb-3">
                     {recipe.name}
@@ -95,7 +96,7 @@ export default function Home() {
                   <div className="text-sm text-gray-500">
                     Created {new Date(recipe.createdAt).toLocaleDateString()}
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}

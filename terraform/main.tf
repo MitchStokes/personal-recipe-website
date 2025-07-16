@@ -117,6 +117,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
         Action = [
           "dynamodb:GetItem",
           "dynamodb:PutItem",
+          "dynamodb:DeleteItem",
           "dynamodb:Scan",
           "dynamodb:Query"
         ]
@@ -129,8 +130,9 @@ resource "aws_iam_role_policy" "lambda_policy" {
 # Lambda function for getting recipes
 data "archive_file" "get_recipes_zip" {
   type        = "zip"
-  source_file = "../lambda/get-recipes.js"
+  source_dir  = "../lambda"
   output_path = "get-recipes.zip"
+  excludes    = ["*.zip", "*.md"]
 }
 
 resource "aws_lambda_function" "get_recipes" {
@@ -146,8 +148,9 @@ resource "aws_lambda_function" "get_recipes" {
 # Lambda function for creating recipes
 data "archive_file" "create_recipe_zip" {
   type        = "zip"
-  source_file = "../lambda/create-recipe.js"
+  source_dir  = "../lambda"
   output_path = "create-recipe.zip"
+  excludes    = ["*.zip", "*.md"]
 }
 
 resource "aws_lambda_function" "create_recipe" {
@@ -156,6 +159,24 @@ resource "aws_lambda_function" "create_recipe" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "create-recipe.handler"
   source_code_hash = data.archive_file.create_recipe_zip.output_base64sha256
+  runtime         = "nodejs18.x"
+  timeout         = 30
+}
+
+# Lambda function for deleting recipes
+data "archive_file" "delete_recipe_zip" {
+  type        = "zip"
+  source_dir  = "../lambda"
+  output_path = "delete-recipe.zip"
+  excludes    = ["*.zip", "*.md"]
+}
+
+resource "aws_lambda_function" "delete_recipe" {
+  filename         = "delete-recipe.zip"
+  function_name    = "${var.project_name}-delete-recipe"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "delete-recipe.handler"
+  source_code_hash = data.archive_file.delete_recipe_zip.output_base64sha256
   runtime         = "nodejs18.x"
   timeout         = 30
 }
@@ -175,6 +196,12 @@ resource "aws_api_gateway_resource" "recipes" {
   rest_api_id = aws_api_gateway_rest_api.recipe_api.id
   parent_id   = aws_api_gateway_rest_api.recipe_api.root_resource_id
   path_part   = "recipes"
+}
+
+resource "aws_api_gateway_resource" "recipe_by_id" {
+  rest_api_id = aws_api_gateway_rest_api.recipe_api.id
+  parent_id   = aws_api_gateway_resource.recipes.id
+  path_part   = "{id}"
 }
 
 # GET method for recipes
@@ -263,11 +290,134 @@ resource "aws_api_gateway_deployment" "recipe_api" {
   depends_on = [
     aws_api_gateway_integration.get_recipes,
     aws_api_gateway_integration.post_recipes,
-    aws_api_gateway_integration.options_recipes
+    aws_api_gateway_integration.options_recipes,
+    aws_api_gateway_integration.delete_recipe,
+    aws_api_gateway_integration.options_recipe_by_id
   ]
 
   rest_api_id = aws_api_gateway_rest_api.recipe_api.id
-  stage_name  = "prod"
+
+  triggers = {
+    redeployment = sha1(jsonencode([
+      aws_api_gateway_resource.recipes.id,
+      aws_api_gateway_resource.recipe_by_id.id,
+      aws_api_gateway_method.get_recipes.id,
+      aws_api_gateway_method.post_recipes.id,
+      aws_api_gateway_method.delete_recipe.id,
+      aws_api_gateway_integration.get_recipes.id,
+      aws_api_gateway_integration.post_recipes.id,
+      aws_api_gateway_integration.delete_recipe.id,
+    ]))
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_api_gateway_stage" "prod" {
+  deployment_id = aws_api_gateway_deployment.recipe_api.id
+  rest_api_id   = aws_api_gateway_rest_api.recipe_api.id
+  stage_name    = "prod"
+}
+
+# Method responses for GET
+resource "aws_api_gateway_method_response" "get_recipes" {
+  rest_api_id = aws_api_gateway_rest_api.recipe_api.id
+  resource_id = aws_api_gateway_resource.recipes.id
+  http_method = aws_api_gateway_method.get_recipes.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
+}
+
+# Method responses for POST
+resource "aws_api_gateway_method_response" "post_recipes" {
+  rest_api_id = aws_api_gateway_rest_api.recipe_api.id
+  resource_id = aws_api_gateway_resource.recipes.id
+  http_method = aws_api_gateway_method.post_recipes.http_method
+  status_code = "201"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
+}
+
+# DELETE method for individual recipes
+resource "aws_api_gateway_method" "delete_recipe" {
+  rest_api_id   = aws_api_gateway_rest_api.recipe_api.id
+  resource_id   = aws_api_gateway_resource.recipe_by_id.id
+  http_method   = "DELETE"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "delete_recipe" {
+  rest_api_id = aws_api_gateway_rest_api.recipe_api.id
+  resource_id = aws_api_gateway_resource.recipe_by_id.id
+  http_method = aws_api_gateway_method.delete_recipe.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.delete_recipe.invoke_arn
+}
+
+# OPTIONS method for recipe by ID (CORS)
+resource "aws_api_gateway_method" "options_recipe_by_id" {
+  rest_api_id   = aws_api_gateway_rest_api.recipe_api.id
+  resource_id   = aws_api_gateway_resource.recipe_by_id.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "options_recipe_by_id" {
+  rest_api_id = aws_api_gateway_rest_api.recipe_api.id
+  resource_id = aws_api_gateway_resource.recipe_by_id.id
+  http_method = aws_api_gateway_method.options_recipe_by_id.http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method_response" "options_recipe_by_id" {
+  rest_api_id = aws_api_gateway_rest_api.recipe_api.id
+  resource_id = aws_api_gateway_resource.recipe_by_id.id
+  http_method = aws_api_gateway_method.options_recipe_by_id.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "options_recipe_by_id" {
+  rest_api_id = aws_api_gateway_rest_api.recipe_api.id
+  resource_id = aws_api_gateway_resource.recipe_by_id.id
+  http_method = aws_api_gateway_method.options_recipe_by_id.http_method
+  status_code = aws_api_gateway_method_response.options_recipe_by_id.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
+}
+
+# Method response for DELETE
+resource "aws_api_gateway_method_response" "delete_recipe" {
+  rest_api_id = aws_api_gateway_rest_api.recipe_api.id
+  resource_id = aws_api_gateway_resource.recipe_by_id.id
+  http_method = aws_api_gateway_method.delete_recipe.http_method
+  status_code = "204"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
 }
 
 # Lambda permissions
@@ -283,6 +433,14 @@ resource "aws_lambda_permission" "create_recipe" {
   statement_id  = "AllowExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.create_recipe.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.recipe_api.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "delete_recipe" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.delete_recipe.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.recipe_api.execution_arn}/*/*"
 }
