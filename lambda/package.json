@@ -1,0 +1,12 @@
+{
+  "name": "recipe-lambda-functions",
+  "version": "1.0.0",
+  "description": "Lambda functions for recipe website",
+  "main": "index.js",
+  "scripts": {
+    "build": "zip -r function.zip ."
+  },
+  "dependencies": {
+    "aws-sdk": "^2.1691.0"
+  }
+}
