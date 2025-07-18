@@ -22,6 +22,7 @@ function RecipeContent() {
   const [editName, setEditName] = useState('');
   const [editContent, setEditContent] = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordAction, setPasswordAction] = useState<'edit' | 'delete'>('edit');
   const [saving, setSaving] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -50,6 +51,15 @@ function RecipeContent() {
   useEffect(() => {
     fetchRecipe();
   }, [fetchRecipe]);
+
+  const handleDeleteClick = () => {
+    if (isPasswordProtectionEnabled()) {
+      setPasswordAction('delete');
+      setShowPasswordModal(true);
+    } else {
+      setShowDeleteConfirm(true);
+    }
+  };
 
   const handleDelete = async () => {
     if (!recipe) return;
@@ -96,6 +106,7 @@ function RecipeContent() {
     }
     
     if (isPasswordProtectionEnabled()) {
+      setPasswordAction('edit');
       setShowPasswordModal(true);
     } else {
       saveRecipe();
@@ -138,7 +149,11 @@ function RecipeContent() {
 
   const handlePasswordSuccess = () => {
     setShowPasswordModal(false);
-    saveRecipe();
+    if (passwordAction === 'edit') {
+      saveRecipe();
+    } else if (passwordAction === 'delete') {
+      setShowDeleteConfirm(true);
+    }
   };
 
   const handlePasswordCancel = () => {
@@ -217,7 +232,7 @@ function RecipeContent() {
                     Edit Recipe
                   </button>
                   <button
-                    onClick={() => setShowDeleteConfirm(true)}
+                    onClick={handleDeleteClick}
                     className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
                   >
                     Delete Recipe
@@ -314,7 +329,9 @@ function RecipeContent() {
         onCancel={handlePasswordCancel}
         onSuccess={handlePasswordSuccess}
         title="Enter Password"
-        message="Please enter the password to save changes to this recipe:"
+        message={passwordAction === 'edit' 
+          ? "Please enter the password to save changes to this recipe:" 
+          : "Please enter the password to delete this recipe:"}
       />
     </div>
   );
