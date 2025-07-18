@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, PutCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { v4: uuidv4 } = require('uuid');
 
 const client = new DynamoDBClient({});
@@ -20,7 +20,7 @@ exports.handler = async (event) => {
     }
 
     try {
-        const { name, content } = JSON.parse(event.body);
+        const { id, name, content } = JSON.parse(event.body);
         
         if (!name || !content) {
             return {
@@ -30,12 +30,39 @@ exports.handler = async (event) => {
             };
         }
 
-        const recipe = {
-            id: uuidv4(),
-            name: name.trim(),
-            content: content.trim(),
-            createdAt: new Date().toISOString()
-        };
+        let recipe;
+        
+        if (id) {
+            // Update existing recipe - first get the current recipe to preserve createdAt
+            const getResult = await dynamodb.send(new GetCommand({
+                TableName: 'recipes',
+                Key: { id: id }
+            }));
+            
+            if (!getResult.Item) {
+                return {
+                    statusCode: 404,
+                    headers,
+                    body: JSON.stringify({ error: 'Recipe not found' })
+                };
+            }
+            
+            recipe = {
+                id: id,
+                name: name.trim(),
+                content: content.trim(),
+                createdAt: getResult.Item.createdAt, // Preserve original creation date
+                updatedAt: new Date().toISOString()
+            };
+        } else {
+            // Create new recipe
+            recipe = {
+                id: uuidv4(),
+                name: name.trim(),
+                content: content.trim(),
+                createdAt: new Date().toISOString()
+            };
+        }
 
         await dynamodb.send(new PutCommand({
             TableName: 'recipes',
@@ -43,7 +70,7 @@ exports.handler = async (event) => {
         }));
 
         return {
-            statusCode: 201,
+            statusCode: id ? 200 : 201,
             headers,
             body: JSON.stringify(recipe)
         };
