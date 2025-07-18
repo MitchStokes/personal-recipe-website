@@ -89,7 +89,7 @@ resource "aws_cloudfront_distribution" "website" {
     target_origin_id = "S3-${aws_s3_bucket.website.bucket}"
 
     forwarded_values {
-      query_string = false
+      query_string = true
       cookies {
         forward = "none"
       }
@@ -103,6 +103,12 @@ resource "aws_cloudfront_distribution" "website" {
 
   custom_error_response {
     error_code         = 404
+    response_code      = 200
+    response_page_path = "/index.html"
+  }
+
+  custom_error_response {
+    error_code         = 403
     response_code      = 200
     response_page_path = "/index.html"
   }
