@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { config } from '@/lib/config';
 
 interface Recipe {
   id: string;
@@ -15,13 +16,12 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'YOUR_API_GATEWAY_URL';
 
   const fetchRecipes = useCallback(async () => {
     try {
       const url = searchQuery 
-        ? `${API_BASE_URL}/recipes?search=${encodeURIComponent(searchQuery)}`
-        : `${API_BASE_URL}/recipes`;
+        ? `${config.apiBaseUrl}/recipes?search=${encodeURIComponent(searchQuery)}`
+        : `${config.apiBaseUrl}/recipes`;
       
       const response = await fetch(url);
       const data = await response.json();
@@ -31,7 +31,7 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, API_BASE_URL]);
+  }, [searchQuery]);
 
   useEffect(() => {
     fetchRecipes();

@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { config, isPasswordProtectionEnabled } from '@/lib/config';
+import { PasswordModal } from '@/components/PasswordModal';
 
 interface Recipe {
   id: string;
@@ -20,14 +22,10 @@ function RecipeContent() {
   const [editName, setEditName] = useState('');
   const [editContent, setEditContent] = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [password, setPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const recipeId = searchParams.get('id');
-
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'YOUR_API_GATEWAY_URL';
-  const REQUIRED_PASSWORD = process.env.NEXT_PUBLIC_CREATE_RECIPE_PASSWORD || 'recipemaster123';
 
   const fetchRecipe = useCallback(async () => {
     if (!recipeId) {
@@ -37,7 +35,7 @@ function RecipeContent() {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/recipes`);
+      const response = await fetch(`${config.apiBaseUrl}/recipes`);
       const recipes = await response.json();
       const foundRecipe = recipes.find((r: Recipe) => r.id === recipeId);
       setRecipe(foundRecipe || null);
@@ -47,7 +45,7 @@ function RecipeContent() {
     } finally {
       setLoading(false);
     }
-  }, [API_BASE_URL, recipeId]);
+  }, [recipeId]);
 
   useEffect(() => {
     fetchRecipe();
@@ -58,7 +56,7 @@ function RecipeContent() {
     
     setDeleting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/recipes/${recipe.id}`, {
+      const response = await fetch(`${config.apiBaseUrl}/recipes/${recipe.id}`, {
         method: 'DELETE',
       });
 
@@ -96,22 +94,19 @@ function RecipeContent() {
       alert('Please fill in both recipe name and content.');
       return;
     }
-    setShowPasswordModal(true);
+    
+    if (isPasswordProtectionEnabled()) {
+      setShowPasswordModal(true);
+    } else {
+      saveRecipe();
+    }
   };
 
-  const handlePasswordSubmit = async () => {
-    if (password !== REQUIRED_PASSWORD) {
-      alert('Incorrect password. Recipe update denied.');
-      setPassword('');
-      return;
-    }
-
-    setShowPasswordModal(false);
-    setPassword('');
+  const saveRecipe = async () => {
     setSaving(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/recipes`, {
+      const response = await fetch(`${config.apiBaseUrl}/recipes`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -141,9 +136,13 @@ function RecipeContent() {
     }
   };
 
+  const handlePasswordSuccess = () => {
+    setShowPasswordModal(false);
+    saveRecipe();
+  };
+
   const handlePasswordCancel = () => {
     setShowPasswordModal(false);
-    setPassword('');
   };
 
   if (loading) {
@@ -310,38 +309,13 @@ function RecipeContent() {
         </div>
       )}
 
-      {/* Password Modal for Edit */}
-      {showPasswordModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Enter Password</h2>
-            <p className="text-gray-600 mb-4">Please enter the password to save changes to this recipe:</p>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 mb-4"
-              onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
-              autoFocus
-            />
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={handlePasswordCancel}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handlePasswordSubmit}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <PasswordModal
+        isOpen={showPasswordModal}
+        onCancel={handlePasswordCancel}
+        onSuccess={handlePasswordSuccess}
+        title="Enter Password"
+        message="Please enter the password to save changes to this recipe:"
+      />
     </div>
   );
 }

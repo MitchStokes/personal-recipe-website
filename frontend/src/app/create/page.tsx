@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { config, isPasswordProtectionEnabled } from '@/lib/config';
+import { PasswordModal } from '@/components/PasswordModal';
 
 export default function CreateRecipe() {
   const router = useRouter();
@@ -10,10 +12,6 @@ export default function CreateRecipe() {
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [password, setPassword] = useState('');
-
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'YOUR_API_GATEWAY_URL';
-  const REQUIRED_PASSWORD = process.env.NEXT_PUBLIC_CREATE_RECIPE_PASSWORD || 'recipemaster123';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,22 +21,18 @@ export default function CreateRecipe() {
       return;
     }
 
-    setShowPasswordModal(true);
+    if (isPasswordProtectionEnabled()) {
+      setShowPasswordModal(true);
+    } else {
+      createRecipe();
+    }
   };
 
-  const handlePasswordSubmit = async () => {
-    if (password !== REQUIRED_PASSWORD) {
-      alert('Incorrect password. Recipe creation denied.');
-      setPassword('');
-      return;
-    }
-
-    setShowPasswordModal(false);
-    setPassword('');
+  const createRecipe = async () => {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/recipes`, {
+      const response = await fetch(`${config.apiBaseUrl}/recipes`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -63,9 +57,13 @@ export default function CreateRecipe() {
     }
   };
 
+  const handlePasswordSuccess = () => {
+    setShowPasswordModal(false);
+    createRecipe();
+  };
+
   const handlePasswordCancel = () => {
     setShowPasswordModal(false);
-    setPassword('');
   };
 
   return (
@@ -134,37 +132,13 @@ export default function CreateRecipe() {
         </div>
       </div>
 
-      {showPasswordModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Enter Password</h2>
-            <p className="text-gray-600 mb-4">Please enter the password to create this recipe:</p>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 mb-4"
-              onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
-              autoFocus
-            />
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={handlePasswordCancel}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handlePasswordSubmit}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-              >
-                Submit
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <PasswordModal
+        isOpen={showPasswordModal}
+        onCancel={handlePasswordCancel}
+        onSuccess={handlePasswordSuccess}
+        title="Enter Password"
+        message="Please enter the password to create this recipe:"
+      />
     </div>
   );
 }
